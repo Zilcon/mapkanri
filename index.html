@@ -270,7 +270,7 @@ async function fetchAndRenderMapData() {
 
         mapData.forEach(item => {
             // ★ 修正箇所: document.getElementById を使用
-            const pathElement = document.getElementById(item.path); 
+            const pathElement = document.getElementById(item.path);
             if (pathElement) {
                 pathElement.style.fill = getColorForDevelop(item.develop);
 
