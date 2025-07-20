@@ -122,45 +122,39 @@
     <div class="info-box" id="mapInfoBox"></div>
 
     <script>
-        // デプロイしたGASウェブアプリのURLに置き換えてください
-        const GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbzVcYxgNzPDrv2sPLNKiMGvJxr8KjiFpztU1hlgKk1G_gVranOfdjMCpQDyWTiK3rBU/exec';
+// デプロイしたGASウェブアプリのURLに置き換えてください
+const GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbzVcYxgNzPDrv2sPLNKiMGvJxr8KjiFpztU1hlgKk1G_gVranOfdjMCpQDyWTiK3rBU/exec';
 
-const loadMapDataButton = document.getElementById('loadMapDataButton');
+// 主要なHTML要素の取得
+const loadMapDataButton = document.getElementById('loadMapDataButton'); // もし使わないなら削除可
 const loadingMessage = document.getElementById('loadingMessage');
 const mapInfoBox = document.getElementById('mapInfoBox');
-
-// --- 新しい変数と要素の取得 ---
 const mapContainer = document.getElementById('map-container');
-const svgMap = document.getElementById('map');
-const mapGroup = document.getElementById('map-paths-group'); // 新しいグループ要素
+const svgMap = document.getElementById('map'); // または 'wrapper' に合わせてください
+const mapGroup = document.getElementById('map-paths-group');
 
+// ズーム・ドラッグ関連の変数
 let currentScale = 1; // 現在のズーム倍率
 let currentTranslate = { x: 0, y: 0 }; // 現在のパン（移動）量
-
-// ドラッグ関連の変数
 let isDragging = false;
 let startPointerX = 0;
 let startPointerY = 0;
 let lastTranslateX = 0;
 let lastTranslateY = 0;
-
 let clickThreshold = 10; // マウス移動がこのピクセル数以下ならクリックとみなす
 let dragStartX = 0;
 let dragStartY = 0;
 
-// ... 既存の変数と要素の取得 ...
-
-// --- タブ機能関連の変数と要素 ---
+// タブ機能関連の変数
 const tabButtons = document.querySelectorAll('.tab-button');
 let currentActiveTabId = 'develop'; // 初期アクティブタブのID
-
 let globalMapData = []; // スプレッドシートから取得した全データを保持する配列
 
 // --- タブ切り替えのイベントリスナー ---
 tabButtons.forEach(button => {
     button.addEventListener('click', () => {
         // 現在アクティブなボタンから'active'クラスを削除
-        document.querySelector('.tab-button.active').classList.remove('active');
+        document.querySelector('.tab-button.active')?.classList.remove('active'); // オプショナルチェイニングを追加
         // クリックされたボタンに'active'クラスを追加
         button.classList.add('active');
         // アクティブなタブIDを更新
@@ -170,66 +164,47 @@ tabButtons.forEach(button => {
     });
 });
 
-// develop値に基づいて色を決定するヘルパー関数 (更新版)
+// --- 色付けヘルパー関数群 ---
+
+// develop値に基づいて色を決定するヘルパー関数
 function getColorForDevelop(developValue) {
     if (developValue === undefined || developValue === null || isNaN(developValue)) {
         return '#cccccc'; // データがない場合は灰色
     }
 
-    // 開発度の値を1〜100にクランプ (範囲内に収める)
-    developValue = Math.max(1, Math.min(100, developValue));
+    developValue = Math.max(1, Math.min(100, developValue)); // 開発度の値を1〜100にクランプ
 
     let r, g, b;
 
     if (developValue <= 50) {
-        // 1 (濃い赤) から 50 (白) へのグラデーション
-        // 赤: #420000 (R:66, G:0, B:0)
-        // 白: #FFFFFF (R:255, G:255, B:255)
-
-        const ratio = (developValue - 1) / (50 - 1); // 0 (developValue=1) から 1 (developValue=50)
-
-        // 赤成分の補間: 66 -> 255
+        // 1 (濃い赤: #420000) から 50 (白: #FFFFFF) へのグラデーション
+        const ratio = (developValue - 1) / 49; // (50 - 1)
         r = Math.round(66 + (255 - 66) * ratio);
-        // 緑成分の補間: 0 -> 255
         g = Math.round(0 + (255 - 0) * ratio);
-        // 青成分の補間: 0 -> 255
         b = Math.round(0 + (255 - 0) * ratio);
-
     } else {
-        // 50 (白) から 100 (濃い青) へのグラデーション
-        // 白: #FFFFFF (R:255, G:255, B:255)
-        // 濃い青: #07365B (R:7, G:54, B:91)
-
-        const ratio = (developValue - 50) / (100 - 50); // 0 (developValue=50) から 1 (developValue=100)
-
-        // 赤成分の補間: 255 -> 7
+        // 50 (白: #FFFFFF) から 100 (濃い青: #07365B) へのグラデーション
+        const ratio = (developValue - 50) / 50; // (100 - 50)
         r = Math.round(255 + (7 - 255) * ratio);
-        // 緑成分の補間: 255 -> 54
         g = Math.round(255 + (54 - 255) * ratio);
-        // 青成分の補間: 255 -> 91
         b = Math.round(255 + (91 - 255) * ratio);
     }
 
-    // RGB値をHEX形式に変換
-    // 0~255の値を16進数2桁に変換し、先頭に0を埋める
     const toHex = (c) => ('0' + c.toString(16)).slice(-2).toUpperCase();
-
     return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
 }
 
-// 国名に基づいて色を決定するヘルパー関数 (新規)
+// 国名に基づいて色を決定するヘルパー関数
 function getColorForCountry(countryName) {
-    if (!countryName) return '#cccccc'; // データがない場合は灰色
-    // 例: 国名ごとに固定の色を割り当てる (実際にはもっと複雑なロジックになるかも)
+    if (!countryName) return '#cccccc';
     const colors = {
-        'インド': '#4CAF50', // 緑
-        '日本': '#F44336',   // 赤
-        'アメリカ': '#2196F3', // 青
-        'イギリス': '#9C27B0', // 紫
-        // ... 他の国と色のマッピング ...
+        'インド': '#4CAF50',
+        '日本': '#F44336',
+        'アメリカ': '#2196F3',
+        'イギリス': '#9C27B0',
+        // 他の国と色のマッピングを追加
     };
-    // 国名ハッシュを生成して色を返す（動的な色付けに便利）
-    const hashCode = (str) => {
+    const hashCode = (str) => { // 文字列からハッシュカラーを生成
         let hash = 0;
         for (let i = 0; i < str.length; i++) {
             hash = str.charCodeAt(i) + ((hash << 5) - hash);
@@ -237,43 +212,32 @@ function getColorForCountry(countryName) {
         let color = '#';
         for (let i = 0; i < 3; i++) {
             let value = (hash >> (i * 8)) & 0xFF;
-            color += ('00' + value.toString(16)).substr(-2);
+            color += ('00' + value.toString(16)).slice(-2); // toUpperCase()は不要
         }
         return color;
     };
-
-    return colors[countryName] || hashCode(countryName); // 定義済みの色があればそれ、なければハッシュ色
+    return colors[countryName] || hashCode(countryName);
 }
 
-// 汎用的なデータに基づいて色を決定するヘルパー関数 (新規)
-// 例: data1, data2, data3 などの数値データ
+// 汎用的な数値データに基づいて色を決定するヘルパー関数 (data1, data2など)
 function getColorForGenericData(value, min = 0, max = 100) {
     if (value === undefined || value === null || isNaN(value)) {
         return '#cccccc';
     }
-    // 値を0-1の範囲に正規化
     const normalized = (value - min) / (max - min);
-    // HSLカラーモデルで色を生成 (例: 赤から緑へのグラデーション)
-    // 色相 (hue) を調整してグラデーションを作る
-    const hue = (1 - normalized) * 120; // 0 (赤) から 120 (緑)
-    return `hsl(${hue}, 70%, 50%)`; // 彩度 70%, 明度 50%
+    const hue = (1 - normalized) * 120; // 赤 (0) から緑 (120)
+    return `hsl(${hue}, 70%, 50%)`;
 }
 
 
 /**
  * マップの色を現在のデータとアクティブなタブIDに基づいてレンダリングする関数
- * この関数が色塗り処理の核となります。
-// ... (中略：getColorForDevelop, getColorForCountry, getColorForGenericData 関数はそのまま) ...
-
-/**
- * マップの色を現在のデータとアクティブなタブIDに基づいてレンダリングする関数
- * この関数が色塗り処理の核となります。
  * @param {Array<Object>} mapData - 全てのマップデータ
  * @param {string} activeTabId - 現在アクティブなタブのID ('develop', 'country', 'data1' など)
  */
 function renderMap(mapData, activeTabId) {
-    const svgMap = document.getElementById('map'); // または 'wrapper'
-    if (!svgMap) {
+    const svgMapElement = document.getElementById('map'); // renderMap内で再取得しても良いが、グローバル変数があればそれを使用
+    if (!svgMapElement) {
         console.error("SVGマップ要素が見つかりません。");
         return;
     }
@@ -294,27 +258,21 @@ function renderMap(mapData, activeTabId) {
                 case 'data3':
                 case 'data4':
                 case 'data5':
-                    // 例として、data1, data2などにも同じ汎用的な色付け関数を適用
-                    // 必要に応じて、各データに特化したmin/max値や色付けロジックを追加してください
-                    const value = item[activeTabId]; // 例: item.data1
-                    // ここで各dataXに応じた最大・最小値を設定するか、共通の範囲を使用
-                    fillColor = getColorForGenericData(value, 0, 100); // 汎用データの最大値を100と仮定
+                    const value = item[activeTabId];
+                    fillColor = getColorForGenericData(value, 0, 100); // 必要に応じて各dataXのmin/maxを調整
                     break;
                 default:
                     fillColor = '#cccccc'; // デフォルト色
                     break;
             }
             pathElement.style.fill = fillColor;
-
-            // マウスオーバー時のデータ属性はrenderMapの外で一度だけ設定済みなので、ここでは再設定不要
-            // もし初回ロード時にデータが設定されない場合は、fetchAndRenderMapDataの`forEach`ループで設定
         }
     });
     console.log(`マップが'${activeTabId}'に基づいてレンダリングされました。`);
 }
 
 
-// fetchAndRenderMapData 関数 (修正: データを globalMapData に保存し、renderMapを呼び出す)
+// fetchAndRenderMapData 関数: GASからデータを取得し、初期設定と描画を行う
 async function fetchAndRenderMapData() {
     loadingMessage.textContent = 'マップデータを読み込み中...';
     try {
@@ -325,35 +283,33 @@ async function fetchAndRenderMapData() {
         const data = await response.json();
         console.log("GASから取得したマップデータ:", data);
 
-        // 取得したデータをグローバル変数に保存
-        globalMapData = data; // ★ ここでデータがグローバル変数に保存されます
+        globalMapData = data; // 取得したデータをグローバル変数に保存
 
         loadingMessage.textContent = 'マップデータを初期レンダリング中...';
         
-        const mapGroup = document.getElementById('map-paths-group'); 
+        // mapGroupの存在を改めて確認（ズーム・ドラッグのために必要）
         if (!mapGroup) { 
             loadingMessage.textContent = 'エラー: SVGグループ要素（map-paths-group）が見つかりませんでした。';
             return;
         }
 
-        // --- マップにデータを初期設定（一度だけ実行） ---
-        // ここで、全てのpath要素にdata-属性とマウスオーバーイベントリスナーを設定します。
-        // この処理はデータ取得時に一度だけ行えばよいです。
+        // --- マップにデータを初期設定（一度だけ実行する処理） ---
         globalMapData.forEach(item => {
             const pathElement = document.getElementById(item.path); 
             if (pathElement) {
-                // 初期ロード時に全てのデータ属性を設定
+                // 全てのカスタムデータ属性を設定
                 for (const key in item) {
                     if (key !== 'path') {
                         pathElement.setAttribute(`data-${key}`, item[key]);
                     }
                 }
+                
                 // マウスオーバーイベントの設定（一度だけ）
                 pathElement.addEventListener('mouseover', (e) => {
                     let infoHtml = `<strong>${item.path}</strong><br>`;
                     // すべてのデータをホバー時に表示
                     for (const key in item) {
-                        infoHtml += `${key}: ${item[key]}<br>`; // ★ pathも含め全てのデータを表示するように修正
+                        infoHtml += `${key}: ${item[key]}<br>`; 
                     }
                     mapInfoBox.innerHTML = infoHtml;
                     mapInfoBox.style.display = 'block';
@@ -364,13 +320,18 @@ async function fetchAndRenderMapData() {
                 pathElement.addEventListener('mouseout', () => {
                     mapInfoBox.style.display = 'none';
                 });
+                
+                // クリックイベントの設定（一度だけ）
+                // ドラッグとクリックの判別はmousedown/mouseupで行うため、ここではhandleMapClickを直接呼ぶ
+                pathElement.addEventListener('click', (e) => {
+                    handleMapClick(e);
+                });
             }
         });
 
         // 初期ロード完了後、現在のタブに基づいてマップをレンダリング
-        // これにより、タブが切り替わったときに renderMap が呼ばれて色が更新されます。
-        renderMap(globalMapData, currentActiveTabId); // ★ ここで初期描画のために renderMap を呼び出す
-
+        renderMap(globalMapData, currentActiveTabId);
+        
         loadingMessage.textContent = 'マップデータが正常に読み込まれました。';
 
     } catch (error) {
@@ -379,134 +340,116 @@ async function fetchAndRenderMapData() {
     }
 }
 
-// ページロード時に自動的にデータを読み込む (既存)
+// ページロード時に自動的にデータを読み込む
 document.addEventListener('DOMContentLoaded', fetchAndRenderMapData);
 
-// ... (中略：ズーム/ドラッグ/クリック処理 applyTransform, handleMapClick などはそのまま) ...
-
-// ... ズーム/ドラッグ/クリック処理 (変更なし) ...
-
 // --- ズーム機能 ---
-mapContainer.addEventListener('wheel', (e) => {
-    e.preventDefault(); // ページのスクロールを防止
+if (mapContainer) { // mapContainerが存在することを確認
+    mapContainer.addEventListener('wheel', (e) => {
+        e.preventDefault(); // ページのスクロールを防止
 
-    const scaleAmount = 0.1; // ズームの段階
-    const oldScale = currentScale;
+        const scaleAmount = 0.1; // ズームの段階
+        const oldScale = currentScale;
 
-    if (e.deltaY < 0) {
-        // スクロールアップでズームイン
-        currentScale += scaleAmount;
-    } else {
-        // スクロールダウンでズームアウト
-        currentScale -= scaleAmount;
-    }
-
-    // ズーム範囲の制限 (例: 0.5倍から5倍まで)
-    currentScale = Math.max(0.5, Math.min(currentScale, 5));
-
-    // マウスポインターを中心としたズーム計算
-    // SVG要素に対する相対座標を取得
-    const svgRect = svgMap.getBoundingClientRect();
-    const pointerXInSvg = e.clientX - svgRect.left;
-    const pointerYInSvg = e.clientY - svgRect.top;
-
-    // 現在のスケールでのSVG内部座標 (グループ要素のtransform適用前)
-    const currentX = (pointerXInSvg - currentTranslate.x) / oldScale;
-    const currentY = (pointerYInSvg - currentTranslate.y) / oldScale;
-
-    // 新しいスケールでの変換後の座標
-    const newTranslateX = pointerXInSvg - currentX * currentScale;
-    const newTranslateY = pointerYInSvg - currentY * currentScale;
-
-    currentTranslate.x = newTranslateX;
-    currentTranslate.y = newTranslateY;
-
-    applyTransform();
-});
-
-// --- ドラッグ機能 ---
-mapContainer.addEventListener('mousedown', (e) => {
-    if (e.button === 0) { // 左クリックの場合
-        isDragging = true;
-        mapContainer.style.cursor = 'grabbing';
-        startPointerX = e.clientX;
-        startPointerY = e.clientY;
-        lastTranslateX = currentTranslate.x;
-        lastTranslateY = currentTranslate.y;
-
-        // クリック/ドラッグ判別のための開始位置を記録
-        dragStartX = e.clientX;
-        dragStartY = e.clientY;
-    }
-});
-
-mapContainer.addEventListener('mousemove', (e) => {
-    if (!isDragging) return;
-
-    // ドラッグ中にカーソルを変更
-    mapContainer.style.cursor = 'grabbing';
-
-    const dx = e.clientX - startPointerX;
-    const dy = e.clientY - startPointerY;
-
-    currentTranslate.x = lastTranslateX + dx;
-    currentTranslate.y = lastTranslateY + dy;
-
-    applyTransform();
-});
-
-mapContainer.addEventListener('mouseup', (e) => {
-    if (isDragging) {
-        isDragging = false;
-        mapContainer.style.cursor = 'grab';
-
-        // マウスの移動距離を計算
-        const moveDistance = Math.sqrt(
-            Math.pow(e.clientX - dragStartX, 2) +
-            Math.pow(e.clientY - dragStartY, 2)
-        );
-
-        // 移動距離が閾値以下であればクリックイベントとみなす
-        if (moveDistance < clickThreshold) {
-            // ここで通常のクリックイベント処理（色塗りなど）を実行
-            // e.targetがクリックされたSVG要素になります
-            handleMapClick(e);
+        if (e.deltaY < 0) {
+            currentScale += scaleAmount; // ズームイン
+        } else {
+            currentScale -= scaleAmount; // ズームアウト
         }
-    }
-});
 
-// マウスがSVGコンテナから離れた場合もドラッグを停止
-mapContainer.addEventListener('mouseleave', () => {
-    if (isDragging) {
-        isDragging = false;
-        mapContainer.style.cursor = 'grab';
-    }
-});
+        currentScale = Math.max(0.5, Math.min(currentScale, 5)); // ズーム範囲の制限 (例: 0.5倍から5倍まで)
+
+        const svgRect = svgMap.getBoundingClientRect(); // SVG要素に対する相対座標を取得
+        const pointerXInSvg = e.clientX - svgRect.left;
+        const pointerYInSvg = e.clientY - svgRect.top;
+
+        const currentX = (pointerXInSvg - currentTranslate.x) / oldScale;
+        const currentY = (pointerYInSvg - currentTranslate.y) / oldScale;
+
+        const newTranslateX = pointerXInSvg - currentX * currentScale;
+        const newTranslateY = pointerYInSvg - currentY * currentScale;
+
+        currentTranslate.x = newTranslateX;
+        currentTranslate.y = newTranslateY;
+
+        applyTransform();
+    });
+
+    // --- ドラッグ機能 ---
+    mapContainer.addEventListener('mousedown', (e) => {
+        if (e.button === 0) { // 左クリックの場合
+            isDragging = true;
+            mapContainer.style.cursor = 'grabbing';
+            startPointerX = e.clientX;
+            startPointerY = e.clientY;
+            lastTranslateX = currentTranslate.x;
+            lastTranslateY = currentTranslate.y;
+
+            dragStartX = e.clientX; // クリック/ドラッグ判別のための開始位置を記録
+            dragStartY = e.clientY;
+        }
+    });
+
+    mapContainer.addEventListener('mousemove', (e) => {
+        if (!isDragging) return;
+
+        mapContainer.style.cursor = 'grabbing';
+
+        const dx = e.clientX - startPointerX;
+        const dy = e.clientY - startPointerY;
+
+        currentTranslate.x = lastTranslateX + dx;
+        currentTranslate.y = lastTranslateY + dy;
+
+        applyTransform();
+    });
+
+    mapContainer.addEventListener('mouseup', (e) => {
+        if (isDragging) {
+            isDragging = false;
+            mapContainer.style.cursor = 'grab';
+
+            const moveDistance = Math.sqrt( // マウスの移動距離を計算
+                Math.pow(e.clientX - dragStartX, 2) +
+                Math.pow(e.clientY - dragStartY, 2)
+            );
+
+            // 移動距離が閾値以下であればクリックイベントとみなす（ただし、pathElementごとのclickイベントで処理）
+            if (moveDistance < clickThreshold) {
+                // ここでは何もしない（pathElementに直接clickリスナーが設定済み）
+            }
+        }
+    });
+
+    // マウスがSVGコンテナから離れた場合もドラッグを停止
+    mapContainer.addEventListener('mouseleave', () => {
+        if (isDragging) {
+            isDragging = false;
+            mapContainer.style.cursor = 'grab';
+        }
+    });
+} else {
+    console.error("mapContainer要素が見つかりませんでした。ズーム/ドラッグ機能が有効になりません。");
+}
 
 
 // --- 変形を適用する共通関数 ---
 function applyTransform() {
-    mapGroup.style.transform = `scale(${currentScale}) translate(${currentTranslate.x / currentScale}px, ${currentTranslate.y / currentScale}px)`;
-    // translateの値をscaleで割ることで、scale(X) translate(Y/X) の形にし、
-    // SVGの座標系での移動量と視覚的な移動量を一致させる
+    if (mapGroup) { 
+        mapGroup.style.transform = `scale(${currentScale}) translate(${currentTranslate.x / currentScale}px, ${currentTranslate.y / currentScale}px)`;
+    } else {
+        console.warn("mapGroupが見つからないため、transformを適用できません。");
+    }
 }
 
-// --- マップクリック処理のハンドラ (新規追加) ---
+// --- マップクリック処理のハンドラ ---
 function handleMapClick(e) {
     const clickedElement = e.target;
     // クリックされたのがpath要素であれば
     if (clickedElement.tagName === 'path' && clickedElement.id && !clickedElement.id.startsWith('pattern')) {
         console.log("クリックされたマス:", clickedElement.id);
-        // ここにクリック時の色塗りなどの処理を追加
-        // 例: クリックで色をトグルする
-        const currentColor = clickedElement.style.fill;
-        if (currentColor === 'blue') {
-            clickedElement.style.fill = 'red';
-        } else {
-            clickedElement.style.fill = 'blue';
-        }
-
-        // mapInfoBoxもクリック時に更新
+        
+        // mapInfoBoxを更新（マウスオーバーと同じ情報を表示）
         let infoHtml = `<strong>クリック: ${clickedElement.id}</strong><br>`;
         for (let i = 0; i < clickedElement.attributes.length; i++) {
             const attr = clickedElement.attributes[i];
@@ -519,89 +462,10 @@ function handleMapClick(e) {
         mapInfoBox.style.left = (e.pageX + 10) + 'px';
         mapInfoBox.style.top = (e.pageY + 10) + 'px';
     } else {
-        // Path要素以外がクリックされた場合や、pattern系のIDの場合
         console.log("マップの背景またはpattern要素がクリックされました。", clickedElement.id);
         mapInfoBox.style.display = 'none';
     }
 }
-
-
-// develop値に基づく色決定関数はそのまま
-function getColorForDevelop(developValue) {
-    if (developValue === undefined || developValue === null || isNaN(developValue)) {
-        return '#cccccc';
-    }
-    if (developValue <= 20) return '#ff4d4d';
-    if (developValue <= 50) return '#ffcc00';
-    if (developValue <= 100) return '#66cc66';
-    return '#3399ff';
-}
-
-// fetchAndRenderMapData 関数も既存のものを少し修正
-// ... 既存のコード ...
-
-// fetchAndRenderMapData 関数
-async function fetchAndRenderMapData() {
-    loadingMessage.textContent = 'マップデータを読み込み中...';
-    try {
-        const response = await fetch(GAS_WEB_APP_URL);
-        if (!response.ok) {
-            throw new Error(`HTTPエラー: ${response.status}`);
-        }
-        const mapData = await response.json();
-        console.log("GASから取得したマップデータ:", mapData);
-
-        loadingMessage.textContent = 'マップデータをレンダリング中...';
-        
-        // mapGroupが存在するか確認（これはズーム・ドラッグのために必要なので残します）
-        if (!mapGroup) { 
-            loadingMessage.textContent = 'エラー: SVGグループ要素（map-paths-group）が見つかりませんでした。';
-            return;
-        }
-
-        mapData.forEach(item => {
-            // ★ 修正箇所: document.getElementById を使用
-            const pathElement = document.getElementById(item.path);
-            if (pathElement) {
-                pathElement.style.fill = getColorForDevelop(item.develop);
-
-                for (const key in item) {
-                    if (key !== 'path') {
-                        pathElement.setAttribute(`data-${key}`, item[key]);
-                    }
-                }
-                // マウスオーバーイベントは既存のものを維持
-                pathElement.addEventListener('mouseover', (e) => {
-                    let infoHtml = `<strong>${item.path}</strong><br>`;
-                    for (const key in item) {
-                        if (key !== 'path') {
-                            infoHtml += `${key}: ${item[key]}<br>`;
-                        }
-                    }
-                    mapInfoBox.innerHTML = infoHtml;
-                    mapInfoBox.style.display = 'block';
-                    mapInfoBox.style.left = (e.pageX + 10) + 'px';
-                    mapInfoBox.style.top = (e.pageY + 10) + 'px';
-                });
-
-                pathElement.addEventListener('mouseout', () => {
-                    mapInfoBox.style.display = 'none';
-                });
-            }
-        });
-
-        loadingMessage.textContent = 'マップデータが正常に読み込まれました。';
-
-    } catch (error) {
-        loadingMessage.textContent = `エラーが発生しました: ${error.message}`;
-        console.error("マップデータの読み込みエラー:", error);
-    }
-}
-
-// ... 既存のコード ...
-// ページロード時に自動的にデータを読み込む場合 (任意)
-document.addEventListener('DOMContentLoaded', fetchAndRenderMapData);
-    </script>
 
 </body>
 </html>
