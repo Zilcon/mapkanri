@@ -39,7 +39,7 @@
     <button id="loadMapDataButton">マップデータを読み込む</button>
     <div id="loadingMessage" style="color: blue;"></div>
 
-    <div id="map-container">
+    <div id="map-container" style="overflow: hidden; cursor: grab;">
     <?xml version="1.0" standalone="no"?>
     <svg id="wrapper" viewBox="0 0 1400.16 600" preserveAspectRatio="xMinYMin" height="600" width="1400.16" style="background-color: rgb(255, 255, 255);"><metadata>
         <rdf:rdf xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:cc="http://creativecommons.org/ns#" xmlns:dc="http://purl.org/dc/elements/1.1/">
@@ -72,91 +72,240 @@
         // デプロイしたGASウェブアプリのURLに置き換えてください
         const GAS_WEB_APP_URL = '1NJ_HDrrcOaK5_YyEyCRv1-quIELAEiaxMpND34Wrg5Bx6IHczcZ9WqPw';
 
-        const loadMapDataButton = document.getElementById('loadMapDataButton');
-        const loadingMessage = document.getElementById('loadingMessage');
-        const mapInfoBox = document.getElementById('mapInfoBox');
+const loadMapDataButton = document.getElementById('loadMapDataButton');
+const loadingMessage = document.getElementById('loadingMessage');
+const mapInfoBox = document.getElementById('mapInfoBox');
 
-        // develop値に基づいて色を決定するヘルパー関数
-        function getColorForDevelop(developValue) {
-            // 例: develop値に応じて色をグラデーションで変える
-            // 0-20: 赤系, 21-50: 黄色系, 51-100: 緑系, 100以上: 青系
-            if (developValue === undefined || developValue === null || isNaN(developValue)) {
-                return '#cccccc'; // データがない場合は灰色
-            }
-            if (developValue <= 20) return '#ff4d4d'; // 赤
-            if (developValue <= 50) return '#ffcc00'; // 黄色
-            if (developValue <= 100) return '#66cc66'; // 緑
-            return '#3399ff'; // 青
+// --- 新しい変数と要素の取得 ---
+const mapContainer = document.getElementById('map-container');
+const svgMap = document.getElementById('map');
+const mapGroup = document.getElementById('map-paths-group'); // 新しいグループ要素
+
+let currentScale = 1; // 現在のズーム倍率
+let currentTranslate = { x: 0, y: 0 }; // 現在のパン（移動）量
+
+// ドラッグ関連の変数
+let isDragging = false;
+let startPointerX = 0;
+let startPointerY = 0;
+let lastTranslateX = 0;
+let lastTranslateY = 0;
+
+let clickThreshold = 10; // マウス移動がこのピクセル数以下ならクリックとみなす
+let dragStartX = 0;
+let dragStartY = 0;
+
+// --- ズーム機能 ---
+mapContainer.addEventListener('wheel', (e) => {
+    e.preventDefault(); // ページのスクロールを防止
+
+    const scaleAmount = 0.1; // ズームの段階
+    const oldScale = currentScale;
+
+    if (e.deltaY < 0) {
+        // スクロールアップでズームイン
+        currentScale += scaleAmount;
+    } else {
+        // スクロールダウンでズームアウト
+        currentScale -= scaleAmount;
+    }
+
+    // ズーム範囲の制限 (例: 0.5倍から5倍まで)
+    currentScale = Math.max(0.5, Math.min(currentScale, 5));
+
+    // マウスポインターを中心としたズーム計算
+    // SVG要素に対する相対座標を取得
+    const svgRect = svgMap.getBoundingClientRect();
+    const pointerXInSvg = e.clientX - svgRect.left;
+    const pointerYInSvg = e.clientY - svgRect.top;
+
+    // 現在のスケールでのSVG内部座標 (グループ要素のtransform適用前)
+    const currentX = (pointerXInSvg - currentTranslate.x) / oldScale;
+    const currentY = (pointerYInSvg - currentTranslate.y) / oldScale;
+
+    // 新しいスケールでの変換後の座標
+    const newTranslateX = pointerXInSvg - currentX * currentScale;
+    const newTranslateY = pointerYInSvg - currentY * currentScale;
+
+    currentTranslate.x = newTranslateX;
+    currentTranslate.y = newTranslateY;
+
+    applyTransform();
+});
+
+// --- ドラッグ機能 ---
+mapContainer.addEventListener('mousedown', (e) => {
+    if (e.button === 0) { // 左クリックの場合
+        isDragging = true;
+        mapContainer.style.cursor = 'grabbing';
+        startPointerX = e.clientX;
+        startPointerY = e.clientY;
+        lastTranslateX = currentTranslate.x;
+        lastTranslateY = currentTranslate.y;
+
+        // クリック/ドラッグ判別のための開始位置を記録
+        dragStartX = e.clientX;
+        dragStartY = e.clientY;
+    }
+});
+
+mapContainer.addEventListener('mousemove', (e) => {
+    if (!isDragging) return;
+
+    // ドラッグ中にカーソルを変更
+    mapContainer.style.cursor = 'grabbing';
+
+    const dx = e.clientX - startPointerX;
+    const dy = e.clientY - startPointerY;
+
+    currentTranslate.x = lastTranslateX + dx;
+    currentTranslate.y = lastTranslateY + dy;
+
+    applyTransform();
+});
+
+mapContainer.addEventListener('mouseup', (e) => {
+    if (isDragging) {
+        isDragging = false;
+        mapContainer.style.cursor = 'grab';
+
+        // マウスの移動距離を計算
+        const moveDistance = Math.sqrt(
+            Math.pow(e.clientX - dragStartX, 2) +
+            Math.pow(e.clientY - dragStartY, 2)
+        );
+
+        // 移動距離が閾値以下であればクリックイベントとみなす
+        if (moveDistance < clickThreshold) {
+            // ここで通常のクリックイベント処理（色塗りなど）を実行
+            // e.targetがクリックされたSVG要素になります
+            handleMapClick(e);
+        }
+    }
+});
+
+// マウスがSVGコンテナから離れた場合もドラッグを停止
+mapContainer.addEventListener('mouseleave', () => {
+    if (isDragging) {
+        isDragging = false;
+        mapContainer.style.cursor = 'grab';
+    }
+});
+
+
+// --- 変形を適用する共通関数 ---
+function applyTransform() {
+    mapGroup.style.transform = `scale(${currentScale}) translate(${currentTranslate.x / currentScale}px, ${currentTranslate.y / currentScale}px)`;
+    // translateの値をscaleで割ることで、scale(X) translate(Y/X) の形にし、
+    // SVGの座標系での移動量と視覚的な移動量を一致させる
+}
+
+// --- マップクリック処理のハンドラ (新規追加) ---
+function handleMapClick(e) {
+    const clickedElement = e.target;
+    // クリックされたのがpath要素であれば
+    if (clickedElement.tagName === 'path' && clickedElement.id && !clickedElement.id.startsWith('pattern')) {
+        console.log("クリックされたマス:", clickedElement.id);
+        // ここにクリック時の色塗りなどの処理を追加
+        // 例: クリックで色をトグルする
+        const currentColor = clickedElement.style.fill;
+        if (currentColor === 'blue') {
+            clickedElement.style.fill = 'red';
+        } else {
+            clickedElement.style.fill = 'blue';
         }
 
-        /**
-         * GASからマップデータを取得し、SVGを更新する関数
-         */
-        async function fetchAndRenderMapData() {
-            loadingMessage.textContent = 'マップデータを読み込み中...';
-            try {
-                const response = await fetch(GAS_WEB_APP_URL);
-                if (!response.ok) {
-                    throw new Error(`HTTPエラー: ${response.status}`);
-                }
-                const mapData = await response.json();
-                console.log("GASから取得したマップデータ:", mapData);
+        // mapInfoBoxもクリック時に更新
+        let infoHtml = `<strong>クリック: ${clickedElement.id}</strong><br>`;
+        for (let i = 0; i < clickedElement.attributes.length; i++) {
+            const attr = clickedElement.attributes[i];
+            if (attr.name.startsWith('data-')) {
+                infoHtml += `${attr.name.substring(5)}: ${attr.value}<br>`;
+            }
+        }
+        mapInfoBox.innerHTML = infoHtml;
+        mapInfoBox.style.display = 'block';
+        mapInfoBox.style.left = (e.pageX + 10) + 'px';
+        mapInfoBox.style.top = (e.pageY + 10) + 'px';
+    } else {
+        // Path要素以外がクリックされた場合や、pattern系のIDの場合
+        console.log("マップの背景またはpattern要素がクリックされました。", clickedElement.id);
+        mapInfoBox.style.display = 'none';
+    }
+}
 
-                loadingMessage.textContent = 'マップデータをレンダリング中...';
-                const svgElement = document.getElementById('map'); // SVG要素のIDはあなたのSVGに合わせてください
 
-                if (!svgElement) {
-                    loadingMessage.textContent = 'エラー: SVG要素が見つかりませんでした。IDを確認してください。';
-                    return;
-                }
+// develop値に基づく色決定関数はそのまま
+function getColorForDevelop(developValue) {
+    if (developValue === undefined || developValue === null || isNaN(developValue)) {
+        return '#cccccc';
+    }
+    if (developValue <= 20) return '#ff4d4d';
+    if (developValue <= 50) return '#ffcc00';
+    if (developValue <= 100) return '#66cc66';
+    return '#3399ff';
+}
 
-                mapData.forEach(item => {
-                    const pathElement = svgElement.getElementById(item.path); // SVG内の要素を取得
-                    if (pathElement) {
-                        // develop値に基づいて色を適用
-                        pathElement.style.fill = getColorForDevelop(item.develop);
+// fetchAndRenderMapData 関数も既存のものを少し修正
+async function fetchAndRenderMapData() {
+    loadingMessage.textContent = 'マップデータを読み込み中...';
+    try {
+        const response = await fetch(GAS_WEB_APP_URL);
+        if (!response.ok) {
+            throw new Error(`HTTPエラー: ${response.status}`);
+        }
+        const mapData = await response.json();
+        console.log("GASから取得したマップデータ:", mapData);
 
-                        // その他のデータをデータ属性として設定 (マウスオーバー表示に利用するため)
-                        for (const key in item) {
-                            if (key !== 'path') { // path自体は属性として設定しない
-                                pathElement.setAttribute(`data-${key}`, item[key]);
-                            }
-                        }
+        loadingMessage.textContent = 'マップデータをレンダリング中...';
+        // const svgElement = document.getElementById('map'); // この行はもう不要 (mapGroupを使うため)
 
-                        // マウスオーバーイベントの設定
-                        pathElement.addEventListener('mouseover', (e) => {
-                            let infoHtml = `<strong>${item.path}</strong><br>`;
-                            for (const key in item) {
-                                if (key !== 'path') {
-                                    infoHtml += `${key}: ${item[key]}<br>`;
-                                }
-                            }
-                            mapInfoBox.innerHTML = infoHtml;
-                            mapInfoBox.style.display = 'block';
-                            // マウスカーソルの近くに表示
-                            mapInfoBox.style.left = (e.pageX + 10) + 'px';
-                            mapInfoBox.style.top = (e.pageY + 10) + 'px';
-                        });
+        if (!mapGroup) { // mapGroupが存在するか確認
+            loadingMessage.textContent = 'エラー: SVGグループ要素（map-paths-group）が見つかりませんでした。';
+            return;
+        }
 
-                        pathElement.addEventListener('mouseout', () => {
-                            mapInfoBox.style.display = 'none';
-                        });
+        mapData.forEach(item => {
+            // mapGroup内でIDを検索
+            const pathElement = mapGroup.getElementById(item.path); // svgElementではなくmapGroupを使う
+            if (pathElement) {
+                pathElement.style.fill = getColorForDevelop(item.develop);
+
+                for (const key in item) {
+                    if (key !== 'path') {
+                        pathElement.setAttribute(`data-${key}`, item[key]);
                     }
+                }
+                // マウスオーバーイベントは既存のものを維持
+                pathElement.addEventListener('mouseover', (e) => {
+                    let infoHtml = `<strong>${item.path}</strong><br>`;
+                    for (const key in item) {
+                        if (key !== 'path') {
+                            infoHtml += `${key}: ${item[key]}<br>`;
+                        }
+                    }
+                    mapInfoBox.innerHTML = infoHtml;
+                    mapInfoBox.style.display = 'block';
+                    mapInfoBox.style.left = (e.pageX + 10) + 'px';
+                    mapInfoBox.style.top = (e.pageY + 10) + 'px';
                 });
 
-                loadingMessage.textContent = 'マップデータが正常に読み込まれました。';
-
-            } catch (error) {
-                loadingMessage.textContent = `エラーが発生しました: ${error.message}`;
-                console.error("マップデータの読み込みエラー:", error);
+                pathElement.addEventListener('mouseout', () => {
+                    mapInfoBox.style.display = 'none';
+                });
             }
-        }
+        });
 
-        // ボタンクリックでデータを読み込む
-        loadMapDataButton.addEventListener('click', fetchAndRenderMapData);
+        loadingMessage.textContent = 'マップデータが正常に読み込まれました。';
 
-        // ページロード時に自動的にデータを読み込む場合 (任意)
-        // document.addEventListener('DOMContentLoaded', fetchAndRenderMapData);
+    } catch (error) {
+        loadingMessage.textContent = `エラーが発生しました: ${error.message}`;
+        console.error("マップデータの読み込みエラー:", error);
+    }
+}
+
+// ページロード時に自動的にデータを読み込む場合 (任意)
+document.addEventListener('DOMContentLoaded', fetchAndRenderMapData);
     </script>
 
 </body>
