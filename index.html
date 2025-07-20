@@ -170,15 +170,51 @@ tabButtons.forEach(button => {
     });
 });
 
-// develop値に基づいて色を決定するヘルパー関数 (既存)
+// develop値に基づいて色を決定するヘルパー関数 (更新版)
 function getColorForDevelop(developValue) {
     if (developValue === undefined || developValue === null || isNaN(developValue)) {
         return '#cccccc'; // データがない場合は灰色
     }
-    if (developValue <= 20) return '#ff4d4d'; // 赤
-    if (developValue <= 50) return '#ffcc00'; // 黄色
-    if (developValue <= 100) return '#66cc66'; // 緑
-    return '#3399ff'; // 青
+
+    // 開発度の値を1〜100にクランプ (範囲内に収める)
+    developValue = Math.max(1, Math.min(100, developValue));
+
+    let r, g, b;
+
+    if (developValue <= 50) {
+        // 1 (濃い赤) から 50 (白) へのグラデーション
+        // 赤: #420000 (R:66, G:0, B:0)
+        // 白: #FFFFFF (R:255, G:255, B:255)
+
+        const ratio = (developValue - 1) / (50 - 1); // 0 (developValue=1) から 1 (developValue=50)
+
+        // 赤成分の補間: 66 -> 255
+        r = Math.round(66 + (255 - 66) * ratio);
+        // 緑成分の補間: 0 -> 255
+        g = Math.round(0 + (255 - 0) * ratio);
+        // 青成分の補間: 0 -> 255
+        b = Math.round(0 + (255 - 0) * ratio);
+
+    } else {
+        // 50 (白) から 100 (濃い青) へのグラデーション
+        // 白: #FFFFFF (R:255, G:255, B:255)
+        // 濃い青: #07365B (R:7, G:54, B:91)
+
+        const ratio = (developValue - 50) / (100 - 50); // 0 (developValue=50) から 1 (developValue=100)
+
+        // 赤成分の補間: 255 -> 7
+        r = Math.round(255 + (7 - 255) * ratio);
+        // 緑成分の補間: 255 -> 54
+        g = Math.round(255 + (54 - 255) * ratio);
+        // 青成分の補間: 255 -> 91
+        b = Math.round(255 + (91 - 255) * ratio);
+    }
+
+    // RGB値をHEX形式に変換
+    // 0~255の値を16進数2桁に変換し、先頭に0を埋める
+    const toHex = (c) => ('0' + c.toString(16)).slice(-2).toUpperCase();
+
+    return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
 }
 
 // 国名に基づいて色を決定するヘルパー関数 (新規)
