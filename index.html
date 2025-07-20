@@ -28,6 +28,47 @@
             font-size: 0.8em;
             pointer-events: none; /* マウスイベントを透過させる */
             display: none; /* 初期状態では非表示 */
+            /* ... 既存のCSS ... */
+
+    .tabs-container {
+        margin-bottom: 20px;
+        display: flex; /* ボタンを横並びにする */
+        flex-wrap: wrap; /* ボタンが多すぎる場合に折り返す */
+        gap: 5px; /* ボタン間のスペース */
+    }
+
+    .tab-button {
+        padding: 8px 15px;
+        border: 1px solid #ccc;
+        background-color: #f0f0f0;
+        cursor: pointer;
+        font-size: 0.9em;
+        border-radius: 5px;
+        transition: background-color 0.2s, border-color 0.2s;
+    }
+
+    .tab-button:hover {
+        background-color: #e0e0e0;
+    }
+
+    .tab-button.active {
+        background-color: #007bff; /* アクティブなタブの色 */
+        color: white;
+        border-color: #007bff;
+    }
+
+    /* マウスオーバー時の情報ボックスは既存のスタイルを維持 */
+    .info-box {
+        position: absolute;
+        background-color: rgba(0, 0, 0, 0.7);
+        color: white;
+        padding: 5px 10px;
+        border-radius: 3px;
+        font-size: 0.8em;
+        pointer-events: none;
+        display: none;
+        z-index: 1000; /* 他の要素より手前に表示 */
+    }
         }
     </style>
 </head>
@@ -37,6 +78,18 @@
     <p>GASからデータを取得し、SVGマップを動的に更新します。</p>
 
     <button id="loadMapDataButton">マップデータを読み込む</button>
+    <div class="tabs-container">
+        <button class="tab-button active" data-tab-id="develop">開発度</button>
+        <button class="tab-button" data-tab-id="country">国名</button>
+        <button class="tab-button" data-tab-id="data1">データ1</button>
+        <button class="tab-button" data-tab-id="data2">データ2</button>
+        <button class="tab-button" data-tab-id="data3">データ3</button>
+        <button class="tab-button" data-tab-id="data4">データ4</button>
+        <button class="tab-button" data-tab-id="data5">データ5</button>
+    </div>
+
+    <div id="map-container" style="overflow: hidden; cursor: grab;">
+        </div>
     <div id="loadingMessage" style="color: blue;"></div>
 
     <div id="map-container" style="overflow: hidden; cursor: grab;">
@@ -94,6 +147,198 @@ let lastTranslateY = 0;
 let clickThreshold = 10; // マウス移動がこのピクセル数以下ならクリックとみなす
 let dragStartX = 0;
 let dragStartY = 0;
+
+// ... 既存の変数と要素の取得 ...
+
+// --- タブ機能関連の変数と要素 ---
+const tabButtons = document.querySelectorAll('.tab-button');
+let currentActiveTabId = 'develop'; // 初期アクティブタブのID
+
+let globalMapData = []; // スプレッドシートから取得した全データを保持する配列
+
+// --- タブ切り替えのイベントリスナー ---
+tabButtons.forEach(button => {
+    button.addEventListener('click', () => {
+        // 現在アクティブなボタンから'active'クラスを削除
+        document.querySelector('.tab-button.active').classList.remove('active');
+        // クリックされたボタンに'active'クラスを追加
+        button.classList.add('active');
+        // アクティブなタブIDを更新
+        currentActiveTabId = button.dataset.tabId;
+        // マップを再レンダリング（色を更新）
+        renderMap(globalMapData, currentActiveTabId);
+    });
+});
+
+// develop値に基づいて色を決定するヘルパー関数 (既存)
+function getColorForDevelop(developValue) {
+    if (developValue === undefined || developValue === null || isNaN(developValue)) {
+        return '#cccccc'; // データがない場合は灰色
+    }
+    if (developValue <= 20) return '#ff4d4d'; // 赤
+    if (developValue <= 50) return '#ffcc00'; // 黄色
+    if (developValue <= 100) return '#66cc66'; // 緑
+    return '#3399ff'; // 青
+}
+
+// 国名に基づいて色を決定するヘルパー関数 (新規)
+function getColorForCountry(countryName) {
+    if (!countryName) return '#cccccc'; // データがない場合は灰色
+    // 例: 国名ごとに固定の色を割り当てる (実際にはもっと複雑なロジックになるかも)
+    const colors = {
+        'インド': '#4CAF50', // 緑
+        '日本': '#F44336',   // 赤
+        'アメリカ': '#2196F3', // 青
+        'イギリス': '#9C27B0', // 紫
+        // ... 他の国と色のマッピング ...
+    };
+    // 国名ハッシュを生成して色を返す（動的な色付けに便利）
+    const hashCode = (str) => {
+        let hash = 0;
+        for (let i = 0; i < str.length; i++) {
+            hash = str.charCodeAt(i) + ((hash << 5) - hash);
+        }
+        let color = '#';
+        for (let i = 0; i < 3; i++) {
+            let value = (hash >> (i * 8)) & 0xFF;
+            color += ('00' + value.toString(16)).substr(-2);
+        }
+        return color;
+    };
+
+    return colors[countryName] || hashCode(countryName); // 定義済みの色があればそれ、なければハッシュ色
+}
+
+// 汎用的なデータに基づいて色を決定するヘルパー関数 (新規)
+// 例: data1, data2, data3 などの数値データ
+function getColorForGenericData(value, min = 0, max = 100) {
+    if (value === undefined || value === null || isNaN(value)) {
+        return '#cccccc';
+    }
+    // 値を0-1の範囲に正規化
+    const normalized = (value - min) / (max - min);
+    // HSLカラーモデルで色を生成 (例: 赤から緑へのグラデーション)
+    // 色相 (hue) を調整してグラデーションを作る
+    const hue = (1 - normalized) * 120; // 0 (赤) から 120 (緑)
+    return `hsl(${hue}, 70%, 50%)`; // 彩度 70%, 明度 50%
+}
+
+
+/**
+ * マップの色を現在のデータとアクティブなタブIDに基づいてレンダリングする関数
+ * この関数が色塗り処理の核となります。
+ * @param {Array<Object>} mapData - 全てのマップデータ
+ * @param {string} activeTabId - 現在アクティブなタブのID ('develop', 'country', 'data1' など)
+ */
+function renderMap(mapData, activeTabId) {
+    const svgMap = document.getElementById('map'); // または 'wrapper'
+    if (!svgMap) {
+        console.error("SVGマップ要素が見つかりません。");
+        return;
+    }
+
+    mapData.forEach(item => {
+        const pathElement = document.getElementById(item.path);
+        if (pathElement) {
+            let fillColor;
+            switch (activeTabId) {
+                case 'develop':
+                    fillColor = getColorForDevelop(item.develop);
+                    break;
+                case 'country':
+                    fillColor = getColorForCountry(item.country);
+                    break;
+                case 'data1':
+                case 'data2':
+                case 'data3':
+                case 'data4':
+                case 'data5':
+                    // 例として、data1, data2などにも同じ汎用的な色付け関数を適用
+                    // 必要に応じて、各データに特化したmin/max値や色付けロジックを追加してください
+                    const value = item[activeTabId]; // 例: item.data1
+                    // ここで各dataXに応じた最大・最小値を設定するか、共通の範囲を使用
+                    fillColor = getColorForGenericData(value, 0, 100); // 汎用データの最大値を100と仮定
+                    break;
+                default:
+                    fillColor = '#cccccc'; // デフォルト色
+                    break;
+            }
+            pathElement.style.fill = fillColor;
+
+            // マウスオーバー時のデータ属性はrenderMapの外で一度だけ設定済みなので、ここでは再設定不要
+            // もし初回ロード時にデータが設定されない場合は、fetchAndRenderMapDataの`forEach`ループで設定
+        }
+    });
+    console.log(`マップが'${activeTabId}'に基づいてレンダリングされました。`);
+}
+
+
+// fetchAndRenderMapData 関数 (修正: データを globalMapData に保存し、renderMapを呼び出す)
+async function fetchAndRenderMapData() {
+    loadingMessage.textContent = 'マップデータを読み込み中...';
+    try {
+        const response = await fetch(GAS_WEB_APP_URL);
+        if (!response.ok) {
+            throw new Error(`HTTPエラー: ${response.status}`);
+        }
+        const data = await response.json();
+        console.log("GASから取得したマップデータ:", data);
+
+        // 取得したデータをグローバル変数に保存
+        globalMapData = data;
+
+        loadingMessage.textContent = 'マップデータを初期レンダリング中...';
+        
+        const mapGroup = document.getElementById('map-paths-group'); 
+        if (!mapGroup) { 
+            loadingMessage.textContent = 'エラー: SVGグループ要素（map-paths-group）が見つかりませんでした。';
+            return;
+        }
+
+        // --- マップにデータを初期設定（一度だけ実行） ---
+        globalMapData.forEach(item => {
+            const pathElement = document.getElementById(item.path); 
+            if (pathElement) {
+                // 初期ロード時に全てのデータ属性を設定
+                for (const key in item) {
+                    if (key !== 'path') {
+                        pathElement.setAttribute(`data-${key}`, item[key]);
+                    }
+                }
+                // マウスオーバーイベントの設定（一度だけ）
+                pathElement.addEventListener('mouseover', (e) => {
+                    let infoHtml = `<strong>${item.path}</strong><br>`;
+                    // すべてのデータをホバー時に表示
+                    for (const key in item) {
+                        infoHtml += `${key}: ${item[key]}<br>`;
+                    }
+                    mapInfoBox.innerHTML = infoHtml;
+                    mapInfoBox.style.display = 'block';
+                    mapInfoBox.style.left = (e.pageX + 10) + 'px';
+                    mapInfoBox.style.top = (e.pageY + 10) + 'px';
+                });
+
+                pathElement.addEventListener('mouseout', () => {
+                    mapInfoBox.style.display = 'none';
+                });
+            }
+        });
+
+        // 初期ロード完了後、現在のタブに基づいてマップをレンダリング
+        renderMap(globalMapData, currentActiveTabId);
+        
+        loadingMessage.textContent = 'マップデータが正常に読み込まれました。';
+
+    } catch (error) {
+        loadingMessage.textContent = `エラーが発生しました: ${error.message}`;
+        console.error("マップデータの読み込みエラー:", error);
+    }
+}
+
+// ページロード時に自動的にデータを読み込む (既存)
+document.addEventListener('DOMContentLoaded', fetchAndRenderMapData);
+
+// ... ズーム/ドラッグ/クリック処理 (変更なし) ...
 
 // --- ズーム機能 ---
 mapContainer.addEventListener('wheel', (e) => {
