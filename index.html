@@ -247,6 +247,9 @@ function getColorForDevelop(developValue) {
 }
 
 // fetchAndRenderMapData 関数も既存のものを少し修正
+// ... 既存のコード ...
+
+// fetchAndRenderMapData 関数
 async function fetchAndRenderMapData() {
     loadingMessage.textContent = 'マップデータを読み込み中...';
     try {
@@ -258,16 +261,16 @@ async function fetchAndRenderMapData() {
         console.log("GASから取得したマップデータ:", mapData);
 
         loadingMessage.textContent = 'マップデータをレンダリング中...';
-        // const svgElement = document.getElementById('map'); // この行はもう不要 (mapGroupを使うため)
-
-        if (!mapGroup) { // mapGroupが存在するか確認
+        
+        // mapGroupが存在するか確認（これはズーム・ドラッグのために必要なので残します）
+        if (!mapGroup) { 
             loadingMessage.textContent = 'エラー: SVGグループ要素（map-paths-group）が見つかりませんでした。';
             return;
         }
 
         mapData.forEach(item => {
-            // mapGroup内でIDを検索
-            const pathElement = mapGroup.getElementById(item.path); // svgElementではなくmapGroupを使う
+            // ★ 修正箇所: document.getElementById を使用
+            const pathElement = document.getElementById(item.path); 
             if (pathElement) {
                 pathElement.style.fill = getColorForDevelop(item.develop);
 
@@ -304,6 +307,7 @@ async function fetchAndRenderMapData() {
     }
 }
 
+// ... 既存のコード ...
 // ページロード時に自動的にデータを読み込む場合 (任意)
 document.addEventListener('DOMContentLoaded', fetchAndRenderMapData);
     </script>
