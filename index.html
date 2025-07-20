@@ -263,6 +263,11 @@ function getColorForGenericData(value, min = 0, max = 100) {
 /**
  * マップの色を現在のデータとアクティブなタブIDに基づいてレンダリングする関数
  * この関数が色塗り処理の核となります。
+// ... (中略：getColorForDevelop, getColorForCountry, getColorForGenericData 関数はそのまま) ...
+
+/**
+ * マップの色を現在のデータとアクティブなタブIDに基づいてレンダリングする関数
+ * この関数が色塗り処理の核となります。
  * @param {Array<Object>} mapData - 全てのマップデータ
  * @param {string} activeTabId - 現在アクティブなタブのID ('develop', 'country', 'data1' など)
  */
@@ -321,7 +326,7 @@ async function fetchAndRenderMapData() {
         console.log("GASから取得したマップデータ:", data);
 
         // 取得したデータをグローバル変数に保存
-        globalMapData = data;
+        globalMapData = data; // ★ ここでデータがグローバル変数に保存されます
 
         loadingMessage.textContent = 'マップデータを初期レンダリング中...';
         
@@ -332,6 +337,8 @@ async function fetchAndRenderMapData() {
         }
 
         // --- マップにデータを初期設定（一度だけ実行） ---
+        // ここで、全てのpath要素にdata-属性とマウスオーバーイベントリスナーを設定します。
+        // この処理はデータ取得時に一度だけ行えばよいです。
         globalMapData.forEach(item => {
             const pathElement = document.getElementById(item.path); 
             if (pathElement) {
@@ -346,7 +353,7 @@ async function fetchAndRenderMapData() {
                     let infoHtml = `<strong>${item.path}</strong><br>`;
                     // すべてのデータをホバー時に表示
                     for (const key in item) {
-                        infoHtml += `${key}: ${item[key]}<br>`;
+                        infoHtml += `${key}: ${item[key]}<br>`; // ★ pathも含め全てのデータを表示するように修正
                     }
                     mapInfoBox.innerHTML = infoHtml;
                     mapInfoBox.style.display = 'block';
@@ -361,8 +368,9 @@ async function fetchAndRenderMapData() {
         });
 
         // 初期ロード完了後、現在のタブに基づいてマップをレンダリング
-        renderMap(globalMapData, currentActiveTabId);
-        
+        // これにより、タブが切り替わったときに renderMap が呼ばれて色が更新されます。
+        renderMap(globalMapData, currentActiveTabId); // ★ ここで初期描画のために renderMap を呼び出す
+
         loadingMessage.textContent = 'マップデータが正常に読み込まれました。';
 
     } catch (error) {
@@ -370,6 +378,11 @@ async function fetchAndRenderMapData() {
         console.error("マップデータの読み込みエラー:", error);
     }
 }
+
+// ページロード時に自動的にデータを読み込む (既存)
+document.addEventListener('DOMContentLoaded', fetchAndRenderMapData);
+
+// ... (中略：ズーム/ドラッグ/クリック処理 applyTransform, handleMapClick などはそのまま) ...
 
 // ... ズーム/ドラッグ/クリック処理 (変更なし) ...
 
